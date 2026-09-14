@@ -16,17 +16,42 @@ from scipy.sparse import (
     coo_matrix
 )
 import csv
+import os
 
 
+TENSILE_HISTORY_FILE = (
+    "316L_CPFEM_tensile_2percent_history.csv"
+)
+
+CHECKPOINT_DIR = (
+    "316L_CPFEM_tensile_2percent_stepwise_checkpoints"
+)
+
+os.makedirs(
+    CHECKPOINT_DIR,
+    exist_ok=True
+)
 
 
-# ============================================================
-# SIMULATION REALIZATION
-# ============================================================
+if not os.path.exists(TENSILE_HISTORY_FILE):
+    with open(TENSILE_HISTORY_FILE, "w", newline="") as f:
+        writer = csv.writer(f)
 
-REALIZATION = "ORI02"
-ORIENTATION_SEED = 20260915
-N_CYCLES = 15
+        writer.writerow([
+            "step",
+            "strain",
+            "stress_MPa",
+            "mean_CRSS_MPa",
+            "max_RSS_MPa",
+            "mean_equiv_plastic_strain",
+            "max_equiv_plastic_strain",
+            "mean_accumulated_slip",
+            "max_accumulated_slip",
+            "max_RSS_over_CRSS",
+            "global_iterations",
+            "max_CP_iterations",
+            "max_CP_residual"
+        ])
 
 # ============================================================
 # STEP 1: 3D Voronoi microstructure for 316L
@@ -109,18 +134,12 @@ print("\nVoronoi microstructure generated.")
 print("Array shape:", grain_ids.shape)
 
 
-
 # ============================================================
-# 5. Generate NEW random crystallographic orientations
-#    while keeping the Voronoi geometry IDENTICAL
+# 5. Generate random crystallographic orientations
 # ============================================================
 
-# ORIENTATION_SEED = 20260912
-
-rotations = R.random(
-    N_grains,
-    random_state=ORIENTATION_SEED
-)
+# Random rotations
+rotations = R.random(N_grains)
 
 # Rotation matrices
 orientation_matrices = rotations.as_matrix()
@@ -130,9 +149,6 @@ euler_angles = rotations.as_euler(
     'ZXZ',
     degrees=True
 )
-
-print("\nOrientation realization seed:",
-      ORIENTATION_SEED)
 
 print("\nOrientation matrices shape:",
       orientation_matrices.shape)
@@ -145,12 +161,8 @@ print("Euler angle array shape:",
 # 6. Save microstructure
 # ============================================================
 
-microstructure_file = (
-    f"316L_3D_Voronoi_microstructure_{REALIZATION}.npz"
-)
-
 np.savez(
-    microstructure_file,
+    "316L_3D_Voronoi_microstructure.npz",
 
     grain_ids=grain_ids,
 
@@ -170,7 +182,8 @@ np.savez(
 )
 
 print("\nMicrostructure saved as:")
-print(microstructure_file)
+print("316L_3D_Voronoi_microstructure.npz")
+
 
 # ============================================================
 # 7. Plot central cross-section
@@ -374,7 +387,7 @@ from mpl_toolkits.mplot3d import Axes3D
 # ------------------------------------------------------------
 
 data = np.load(
-    f"316L_3D_Voronoi_microstructure_{REALIZATION}.npz"
+    "316L_3D_Voronoi_microstructure.npz"
 )
 
 grain_ids = data["grain_ids"]
@@ -2096,31 +2109,32 @@ print(
 # ============================================================
 
 
-
-
 # ============================================================
 # 1. Load grain orientations
 # ============================================================
 
-microstructure_file = (
-    f"316L_3D_Voronoi_microstructure_{REALIZATION}.npz"
+micro_data = np.load(
+    "316L_3D_Voronoi_microstructure.npz"
 )
 
-micro_data = np.load(microstructure_file)
+grain_orientation = (
+    micro_data[
+        "orientation_matrices"
+    ]
+)
 
-grain_orientation = micro_data["orientation_matrices"]
+grain_euler = (
+    micro_data[
+        "euler_angles"
+    ]
+)
 
-grain_euler = micro_data["euler_angles"]
 
 print(
     "Number of grain orientations:",
     len(grain_orientation)
 )
 
-print(
-    "Loaded microstructure:",
-    microstructure_file
-)
 
 # ============================================================
 # 2. Select one example grain
@@ -2569,7 +2583,7 @@ rate_exponent = 20.0
 
 strain_rate = 0.001   # Applied strain rate, 1/s
 
-total_strain = 0.0005
+total_strain = 0.02
 
 n_steps = 1000
 
@@ -2810,11 +2824,6 @@ def calculate_slip_rates_from_stress(
 # ============================================================
 # 10. Incremental strain-controlled simulation
 # ============================================================
-# ------------------------------------------------------------
-# Algorithmic tangent sparse solver
-# ------------------------------------------------------------
-
-# K_solver_alg = None
 
 for step in range(
     n_steps
@@ -3246,7 +3255,7 @@ rate_exponent = 20.0
 
 strain_rate = 0.001
 
-total_strain = 0.0005
+total_strain = 0.02
 n_steps = 1000
 
 dt = (
@@ -4334,7 +4343,7 @@ rate_exponent = 20.0
 
 strain_rate = 0.001
 
-total_strain = 0.0005
+total_strain = 0.02
 n_steps = 1000
 
 dt = (
@@ -5319,7 +5328,7 @@ rate_exponent = 20.0
 
 strain_rate = 0.001
 
-total_strain = 0.0005
+total_strain = 0.02
 n_steps = 1000
 
 dt = 0.01
@@ -6494,72 +6503,11 @@ GAMMA0 = 1.0e-3
 RATE_EXPONENT = 20.0
 STRAIN_RATE = 1.0e-3
 
-# TOTAL_STRAIN = 0.0005
+TOTAL_STRAIN = 0.02
 
-# INITIAL_STRAIN_STEP = 5.0e-4
-# MIN_STRAIN_STEP = 5.0e-5
-# MAX_STRAIN_STEP = 1.0e-3
-
-
-
-# ============================================================
-# CYCLIC STRAIN CONTROL
-# ============================================================
-
-# ================================================================
-# MONOTONIC TENSILE STRAIN CONTROL
-# ================================================================
-
-MAX_TENSILE_STRAIN = 0.0200       # 2.0%
-
-# Initial increment = 0.05%
 INITIAL_STRAIN_STEP = 5.0e-4
-
-# Minimum increment = 0.005%
 MIN_STRAIN_STEP = 5.0e-5
-
-# Maximum increment = 0.10%
 MAX_STRAIN_STEP = 1.0e-3
-
-print()
-print("=" * 70)
-print("MONOTONIC TENSILE CPFEM")
-print("=" * 70)
-print(f"Target tensile strain = {MAX_TENSILE_STRAIN:.6f}")
-print(f"Target tensile strain = {MAX_TENSILE_STRAIN*100:.2f}%")
-print(f"Initial strain step   = {INITIAL_STRAIN_STEP:.6e}")
-print(f"Minimum strain step   = {MIN_STRAIN_STEP:.6e}")
-print(f"Maximum strain step   = {MAX_STRAIN_STEP:.6e}")
-print("=" * 70)
-
-# ================================================================
-# FATIGUE INDICATOR / FIP SETTINGS
-# ================================================================
-
-# Fatemi-Socie normal-stress sensitivity.
-#
-# Set to zero for the first run so that the raw shear-slip
-# contribution can be examined independently.
-#
-# This is NOT a calibrated material constant yet.
-FS_K = 0.0
-
-# Reference stress used by the FS normal-stress correction.
-# Keep separate from TAU0 because this is a fatigue-model
-# reference parameter, not the crystal slip resistance.
-FS_SIGMA_REF = TAU0
-
-# Brown-Miller weighting coefficient.
-#
-# Set to 1.0 initially so that the raw combined indicator
-# can be examined. It should be calibrated later.
-BM_C = 1.0
-
-# SWT uses stress × strain and therefore has units of MPa.
-# No fitting parameter is required.
-
-
-
 
 MAX_GLOBAL_ITER = 30
 GLOBAL_TOL = 1.0e-8
@@ -7210,16 +7158,21 @@ print(
 )
 
 
-
-
-
-
+# ================================================================
+# 9. FCC SLIP SYSTEMS
+#
+# Define the 12 FCC {111}<110> systems directly.
+#
+# The resulting tensor is:
+#
+#       S = 1/2 (s⊗n + n⊗s)
+#
+# where n and s are unit vectors.
+# ================================================================
 
 def build_fcc_slip_systems():
 
-    # ------------------------------------------------------------
     # Four {111} plane normals
-    # ------------------------------------------------------------
     planes = [
         np.array([ 1.0,  1.0,  1.0]),
         np.array([ 1.0,  1.0, -1.0]),
@@ -7227,9 +7180,10 @@ def build_fcc_slip_systems():
         np.array([-1.0,  1.0,  1.0])
     ]
 
-    # ------------------------------------------------------------
-    # Three <110> directions in each plane
-    # ------------------------------------------------------------
+    # Three <110> directions in each plane.
+    #
+    # Each direction is explicitly checked for
+    # orthogonality to its plane.
     directions = [
         [
             np.array([ 1.0, -1.0,  0.0]),
@@ -7257,9 +7211,11 @@ def build_fcc_slip_systems():
     ]
 
     systems = []
-    normals = []
 
-    for p, dirs in zip(planes, directions):
+    for p, dirs in zip(
+        planes,
+        directions
+    ):
 
         n = p / np.linalg.norm(p)
 
@@ -7267,7 +7223,9 @@ def build_fcc_slip_systems():
 
             s = s / np.linalg.norm(s)
 
+            # Orthogonality check
             if abs(np.dot(n, s)) > 1.0e-12:
+
                 raise RuntimeError(
                     "Slip direction and plane "
                     "normal are not orthogonal."
@@ -7280,28 +7238,20 @@ def build_fcc_slip_systems():
             )
 
             systems.append(S)
-            normals.append(n.copy())
 
-    return (
-        np.asarray(systems, dtype=np.float64),
-        np.asarray(normals, dtype=np.float64)
+    return np.asarray(
+        systems,
+        dtype=np.float64
     )
 
 
-(
-    crystal_S,
-    crystal_normals
-) = build_fcc_slip_systems()
+crystal_S = build_fcc_slip_systems()
 
 
 if crystal_S.shape != (12, 3, 3):
+
     raise RuntimeError(
         "FCC slip-system construction failed."
-    )
-
-if crystal_normals.shape != (12, 3):
-    raise RuntimeError(
-        "FCC slip-plane normal construction failed."
     )
 
 
@@ -7310,19 +7260,6 @@ print(
     "FCC slip systems =",
     crystal_S.shape[0]
 )
-
-print(
-    "FCC slip-plane normals =",
-    crystal_normals.shape
-)
-
-
-
-
-
-
-
-
 
 
 # ================================================================
@@ -7378,46 +7315,6 @@ print(
 element_S = grain_S[
     element_grain
 ]
-
-
-# ================================================================
-# 10B. GRAIN / ELEMENT SLIP-PLANE NORMALS
-# ================================================================
-
-grain_normals = np.empty(
-    (n_grains, 12, 3),
-    dtype=np.float64
-)
-
-for g_id in range(n_grains):
-
-    Q = grain_orientation[g_id]
-
-    for a in range(12):
-
-        n = Q @ crystal_normals[a]
-
-        n /= np.linalg.norm(n)
-
-        grain_normals[
-            g_id,
-            a
-        ] = n
-
-
-element_normals = grain_normals[
-    element_grain
-]
-
-
-print(
-    "element_normals shape =",
-    element_normals.shape
-)
-
-
-
-
 
 
 print(
@@ -8885,533 +8782,36 @@ trial_accumulated_slip_system = np.zeros(
 # 18. GLOBAL HISTORY
 # ================================================================
 
-# current_strain = 0.0
-
-# strain_step = INITIAL_STRAIN_STEP
-
-# step = 0
-
-# global_strain_history = []
-
-# global_stress_history = []
-
-# step_history = []
-
-# cp_state_history = []
-
-
-# ================================================================
-# 18. GLOBAL HISTORY — MONOTONIC TENSILE LOADING
-# ================================================================
-
 current_strain = 0.0
 
 strain_step = INITIAL_STRAIN_STEP
 
 step = 0
 
-target_strain = MAX_TENSILE_STRAIN
-
-# Compatibility variables for existing checkpoint machinery
-cyclic_segment = 0
-cyclic_direction = +1
-segment_target = MAX_TENSILE_STRAIN
-
 global_strain_history = []
+
 global_stress_history = []
+
 step_history = []
 
 cp_state_history = []
 
-# Only converged local-field states are stored
+
+# ================================================================
+# LOCAL FIELD HISTORY
+# ================================================================
+#
+# Only CONVERGED load steps are stored.
+#
+# This is important because Newton iterations represent trial
+# states and should not be interpreted as physical load history.
+# ================================================================
+
 local_field_history = []
+
 local_field_step_history = []
+
 local_field_strain_history = []
-local_field_cycle_history = []
-
-
-
-# ================================================================
-# STEPWISE CHECKPOINT SAVING
-# ================================================================
-#
-# A separate NPZ file is written after EVERY CONVERGED load step.
-#
-# This prevents loss of local FE–CPFEM history if Jupyter crashes,
-# the kernel is restarted, or the simulation is interrupted.
-#
-# Only physically converged states are saved.
-# ================================================================
-
-import os
-
-# CHECKPOINT_DIR = (
-#     "316L_CPFEM_10cycles_stepwise_checkpoints"
-# )
-
-CHECKPOINT_DIR = (
-    f"316L_CPFEM_tensile_2percent_{REALIZATION}_stepwise_checkpoints"
-)
-
-os.makedirs(
-    CHECKPOINT_DIR,
-    exist_ok=True
-)
-
-print()
-print("=" * 70)
-print("STEPWISE CHECKPOINT SAVING ENABLED")
-print("=" * 70)
-print(
-    "Checkpoint directory:",
-    CHECKPOINT_DIR
-)
-
-
-
-def save_converged_checkpoint(
-    step,
-    cycle,
-    cyclic_segment,
-    cyclic_direction,
-    current_strain,
-    segment_target,
-    sigma_macro,
-    strain_all,
-    stress,
-    stress_voigt,
-    plastic_strain,
-    resistance,
-    accumulated_slip,
-    accumulated_slip_system,
-    slip_increment,
-    rss,
-    cp_residual,
-    cp_iterations,
-    cp_converged,
-    element_grain,
-    element_centers
-):
-    """
-    Save one physically converged FE–CPFEM state.
-
-    IMPORTANT:
-    This function is called ONLY after global convergence.
-
-    Therefore no Newton trial states are saved.
-    """
-
-    # ------------------------------------------------------------
-    # Total strain: engineering Voigt
-    # [xx, yy, zz, xy, yz, xz]
-    # ------------------------------------------------------------
-
-    total_strain_voigt = np.asarray(
-        strain_all,
-        dtype=np.float32
-    ).copy()
-
-    # ------------------------------------------------------------
-    # Convert engineering Voigt strain to tensor
-    # ------------------------------------------------------------
-
-    total_strain_tensor = np.zeros(
-        (
-            len(total_strain_voigt),
-            3,
-            3
-        ),
-        dtype=np.float32
-    )
-
-    total_strain_tensor[:, 0, 0] = (
-        total_strain_voigt[:, 0]
-    )
-
-    total_strain_tensor[:, 1, 1] = (
-        total_strain_voigt[:, 1]
-    )
-
-    total_strain_tensor[:, 2, 2] = (
-        total_strain_voigt[:, 2]
-    )
-
-    total_strain_tensor[:, 0, 1] = (
-        total_strain_voigt[:, 3] / 2.0
-    )
-    total_strain_tensor[:, 1, 0] = (
-        total_strain_voigt[:, 3] / 2.0
-    )
-
-    total_strain_tensor[:, 1, 2] = (
-        total_strain_voigt[:, 4] / 2.0
-    )
-    total_strain_tensor[:, 2, 1] = (
-        total_strain_voigt[:, 4] / 2.0
-    )
-
-    total_strain_tensor[:, 0, 2] = (
-        total_strain_voigt[:, 5] / 2.0
-    )
-    total_strain_tensor[:, 2, 0] = (
-        total_strain_voigt[:, 5] / 2.0
-    )
-
-
-    # ------------------------------------------------------------
-    # Local strain quantities
-    # ------------------------------------------------------------
-
-    local_axial_strain = (
-        total_strain_voigt[:, 2].copy()
-    )
-
-    elastic_strain_tensor = (
-        total_strain_tensor
-        - plastic_strain
-    )
-
-
-
-
-
-    
-
-    # ------------------------------------------------------------
-    # J2 equivalent total strain
-    # ------------------------------------------------------------
-
-    total_dev = (
-        total_strain_tensor
-        -
-        np.trace(
-            total_strain_tensor,
-            axis1=1,
-            axis2=2
-        )[:, None, None] / 3.0
-    )
-
-    equiv_total_strain = np.sqrt(
-        np.maximum(
-            0.0,
-            (2.0 / 3.0)
-            *
-            np.einsum(
-                "eij,eij->e",
-                total_dev,
-                total_dev
-            )
-        )
-    )
-
-    # ------------------------------------------------------------
-    # J2 equivalent plastic strain
-    # ------------------------------------------------------------
-
-    plastic_strain = np.asarray(
-        plastic_strain,
-        dtype=np.float32
-    ).copy()
-
-    plastic_dev = (
-        plastic_strain
-        -
-        np.trace(
-            plastic_strain,
-            axis1=1,
-            axis2=2
-        )[:, None, None] / 3.0
-    )
-
-    equiv_plastic_strain = np.sqrt(
-        np.maximum(
-            0.0,
-            (2.0 / 3.0)
-            *
-            np.einsum(
-                "eij,eij->e",
-                plastic_dev,
-                plastic_dev
-            )
-        )
-    )
-
-    # ------------------------------------------------------------
-    # Von-Mises stress
-    # ------------------------------------------------------------
-
-    stress = np.asarray(
-        stress,
-        dtype=np.float32
-    ).copy()
-
-    stress_dev = (
-        stress
-        -
-        np.trace(
-            stress,
-            axis1=1,
-            axis2=2
-        )[:, None, None] / 3.0
-    )
-
-    equiv_stress = np.sqrt(
-        np.maximum(
-            0.0,
-            1.5
-            *
-            np.einsum(
-                "eij,eij->e",
-                stress_dev,
-                stress_dev
-            )
-        )
-    )
-
-    # ------------------------------------------------------------
-    # Maximum RSS
-    # ------------------------------------------------------------
-
-    rss = np.asarray(
-        rss,
-        dtype=np.float32
-    ).copy()
-
-    max_abs_rss = np.max(
-        np.abs(rss),
-        axis=1
-    ).astype(np.float32)
-
-    max_rss_system = np.argmax(
-        np.abs(rss),
-        axis=1
-    ).astype(np.int16)
-
-    # ------------------------------------------------------------
-    # Save
-    # ------------------------------------------------------------
-
-    filename = os.path.join(
-        CHECKPOINT_DIR,
-        f"step_{int(step):04d}.npz"
-    )
-
-    np.savez_compressed(
-
-        filename,
-
-        # --------------------------------------------------------
-        # Global state
-        # --------------------------------------------------------
-
-        step=np.int32(step),
-        cycle=np.int32(cycle),
-        cyclic_segment=np.int32(
-            cyclic_segment
-        ),
-        cyclic_direction=np.int32(
-            cyclic_direction
-        ),
-
-        current_strain=np.float64(
-            current_strain
-        ),
-
-        segment_target=np.float64(
-            segment_target
-        ),
-
-        macro_stress=np.float64(
-            sigma_macro
-        ),
-
-        # --------------------------------------------------------
-        # Element / grain identification
-        # --------------------------------------------------------
-
-        element_id=np.arange(
-            len(element_grain),
-            dtype=np.int32
-        ),
-
-        element_grain=np.asarray(
-            element_grain,
-            dtype=np.int32
-        ).copy(),
-
-        element_centers=np.asarray(
-            element_centers,
-            dtype=np.float32
-        ).copy(),
-
-        # # --------------------------------------------------------
-        # # Local total deformation
-        # # --------------------------------------------------------
-
-        # total_strain_voigt=
-        #     total_strain_voigt,
-
-        # total_strain=
-        #     total_strain_tensor,
-
-        # equiv_total_strain=
-        #     equiv_total_strain.astype(
-        #         np.float32
-        #     ),
-        # local_axial_strain=local_axial_strain,
-        # equiv_total_strain=equiv_total_strain,
-        # equiv_plastic_strain=equiv_plastic_strain,
-        # elastic_strain_tensor=elastic_strain_tensor.astype(
-        #     np.float32
-        # ),
-
-        #--------------------------------------------------------
-        # Local total deformation
-        # --------------------------------------------------------
-
-        total_strain_voigt=(
-            total_strain_voigt.astype(
-                np.float32
-            )
-        ),
-
-        total_strain=(
-            total_strain_tensor.astype(
-                np.float32
-            )
-        ),
-
-        # Local axial strain = epsilon_zz
-        local_axial_strain=(
-            local_axial_strain.astype(
-                np.float32
-            )
-        ),
-
-        # J2 equivalent total strain
-        equiv_total_strain=(
-            equiv_total_strain.astype(
-                np.float32
-            )
-        ),
-
-        # J2 equivalent plastic strain
-        equiv_plastic_strain=(
-            equiv_plastic_strain.astype(
-                np.float32
-            )
-        ),
-
-        # Elastic strain tensor:
-        # epsilon_e = epsilon_total - epsilon_plastic
-        elastic_strain_tensor=(
-            elastic_strain_tensor.astype(
-                np.float32
-            )
-        ),
-
-
-
-
-
-
-
-
-        
-
-        # --------------------------------------------------------
-        # Local plastic deformation
-        # --------------------------------------------------------
-
-        plastic_strain=
-            plastic_strain,
-
-        equiv_plastic_strain=
-            equiv_plastic_strain.astype(
-                np.float32
-            ),
-
-        # --------------------------------------------------------
-        # Local stress
-        # --------------------------------------------------------
-
-        stress_voigt=np.asarray(
-            stress_voigt,
-            dtype=np.float32
-        ).copy(),
-
-        stress=stress,
-
-        equiv_stress=
-            equiv_stress.astype(
-                np.float32
-            ),
-
-        # --------------------------------------------------------
-        # Crystal plasticity state
-        # --------------------------------------------------------
-
-        CRSS=np.asarray(
-            resistance,
-            dtype=np.float32
-        ).copy(),
-
-        accumulated_slip=np.asarray(
-            accumulated_slip,
-            dtype=np.float32
-        ).copy(),
-
-        accumulated_slip_system=
-            np.asarray(
-                accumulated_slip_system,
-                dtype=np.float32
-            ).copy(),
-
-        slip_increment=np.asarray(
-            slip_increment,
-            dtype=np.float32
-        ).copy(),
-
-        RSS=rss,
-
-        max_abs_RSS=max_abs_rss,
-
-        max_RSS_system=max_rss_system,
-
-        # --------------------------------------------------------
-        # Local solver diagnostics
-        # --------------------------------------------------------
-
-        CP_residual=np.asarray(
-            cp_residual,
-            dtype=np.float32
-        ).copy(),
-
-        CP_iterations=np.asarray(
-            cp_iterations,
-            dtype=np.int16
-        ).copy(),
-
-        CP_converged=np.asarray(
-            cp_converged,
-            dtype=bool
-        ).copy()
-    )
-
-    return filename
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ================================================================
@@ -9511,12 +8911,13 @@ print(
     f"shape = {F_internal.shape}"
 )
 
+
 # ================================================================
-# TENSILE PROGRESS HISTORY CSV
+# TENSILE GLOBAL HISTORY CSV
 # ================================================================
 
 TENSILE_HISTORY_FILE = (
-    f"316L_CPFEM_tensile_2percent_{REALIZATION}_history.csv"
+    "316L_CPFEM_tensile_2percent_history.csv"
 )
 
 if not os.path.exists(TENSILE_HISTORY_FILE):
@@ -9537,7 +8938,7 @@ if not os.path.exists(TENSILE_HISTORY_FILE):
             "max_RSS_MPa",
             "mean_plastic_strain",
             "mean_accumulated_slip",
-            "max_EQP",
+            "max_equiv_plastic_strain",
             "max_accumulated_slip",
             "max_RSS_over_CRSS",
             "global_iterations",
@@ -9545,126 +8946,42 @@ if not os.path.exists(TENSILE_HISTORY_FILE):
             "max_CP_residual"
         ])
 
-print()
-print("=" * 70)
-print("TENSILE HISTORY FILE")
-print("=" * 70)
-print(TENSILE_HISTORY_FILE)
-print("=" * 70)
 
 
 
-# ================================================================
+
+
+
+
+# ============================================================
 # SECTION 19 — GLOBAL FE–CPFEM SOLVER
-# MONOTONIC TENSILE STRAIN CONTROL
-# ================================================================
+# ============================================================
 
-K_solver_alg = None
+while current_strain < TOTAL_STRAIN - 1.0e-14:
 
-while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
+    step += 1
 
-    # ------------------------------------------------------------
-    # Determine next tensile target
-    # ------------------------------------------------------------
-    #
-    # Monotonic loading:
-    #
-    #       0  --->  2.0% strain
-    #
-    # No unloading
-    # No reversal
-    # No cyclic targets
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
+    # Target strain for this load step
+    # --------------------------------------------------------
 
     target_strain = min(
         current_strain + strain_step,
-        MAX_TENSILE_STRAIN
+        TOTAL_STRAIN
     )
 
-    # Actual signed strain increment.
-    # For monotonic tension this is always positive.
     actual_increment = (
         target_strain - current_strain
     )
 
-    # ------------------------------------------------------------
-    # Loading direction
-    # ------------------------------------------------------------
-
-    cyclic_direction = +1
-
-    # Keep these variables for compatibility with the existing
-    # checkpoint/output functions.
-    cyclic_segment = 0
-    segment_target = MAX_TENSILE_STRAIN
-
-    # ------------------------------------------------------------
-    # Safety check
-    # ------------------------------------------------------------
-
-    if actual_increment <= 0.0:
-
-        print()
-        print("=" * 70)
-        print("WARNING: NON-POSITIVE TENSILE STRAIN INCREMENT")
-        print("=" * 70)
-        print(f"Current strain = {current_strain:.12e}")
-        print(f"Target strain  = {target_strain:.12e}")
-        print(f"Increment      = {actual_increment:.12e}")
-        print("=" * 70)
-
-        break
-
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
     # CP time increment
-    #
-    # dt must remain positive.
-    # Loading direction is represented by actual_increment.
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
 
     cp_dt = (
-        abs(actual_increment)
+        actual_increment
         / STRAIN_RATE
     )
-
-    # ------------------------------------------------------------
-    # Advance global load-step counter
-    # ------------------------------------------------------------
-
-    step += 1
-
-    # ------------------------------------------------------------
-    # Diagnostic output
-    # ------------------------------------------------------------
-
-    print()
-    print("=" * 70)
-    print(f"TENSILE LOAD STEP {step}")
-    print("=" * 70)
-    print(
-        f"Current strain = "
-        f"{current_strain:.8e}"
-    )
-    print(
-        f"Target strain  = "
-        f"{target_strain:.8e}"
-    )
-    print(
-        f"Increment      = "
-        f"{actual_increment:.8e}"
-    )
-    print(
-        f"Target (%)     = "
-        f"{target_strain * 100.0:.5f}%"
-    )
-    print(
-        f"CP dt          = "
-        f"{cp_dt:.8e}"
-    )
-    print("=" * 70)
-
-
-
 
     # --------------------------------------------------------
     # Backup committed state
@@ -9686,13 +9003,13 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
         accumulated_slip_committed.copy()
     )
 
+    accumulated_slip_system_backup = (
+    accumulated_slip_system_committed.copy()
+    )
+
     cp_x_backup = (
         cp_x_committed.copy()
     )
-    accumulated_slip_system_backup = (
-        accumulated_slip_system_committed.copy()
-    )    
-    # )
 
     # --------------------------------------------------------
     # Initial guess for global Newton iteration
@@ -9748,7 +9065,6 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
         trial_plastic.fill(0.0)
         trial_resistance.fill(0.0)
         trial_accumulated.fill(0.0)
-        trial_accumulated_slip_system.fill(0.0)
         trial_slip.fill(0.0)
         trial_rss.fill(0.0)
         trial_cp_residual.fill(0.0)
@@ -9860,118 +9176,9 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
 
             cp_calls_this_iteration += 1
 
-            # # Store local CP convergence status
-            # trial_cp_converged[e] = cp_ok
-            
-            # # ------------------------------------------------
-            # # Check local constitutive convergence
-            # # ------------------------------------------------
-
-            # if not cp_ok:
-
-            #     print()
-            #     print(
-            #         "------------------------------------------------"
-            #     )
-            #     print(
-            #         f"CPFEM LOCAL SOLVER FAILED "
-            #         f"AT ELEMENT {e}"
-            #     )
-            #     print(
-            #         f"Global load step : {step}"
-            #     )
-            #     print(
-            #         f"Global iteration : {global_iter}"
-            #     )
-            #     print(
-            #         f"CP residual      : {cp_res:.6e}"
-            #     )
-            #     print(
-            #         f"CP iterations    : {cp_niter}"
-            #     )
-            #     print(
-            #         "------------------------------------------------"
-            #     )
-
-            #     global_converged = False
-            #     break
-            
-            
-
-
-            
-
-            # # ------------------------------------------------
-            # # Store local trial state
-            # # ------------------------------------------------
-
-            # trial_slip[e] = dgamma
-
-            # trial_plastic[e] = (
-            #     plastic_new
-            # )
-
-            # trial_stress[e] = (
-            #     stress
-            # )
-
-            # trial_stress_voigt[e] = (
-            #     stress_voigt
-            # )
-
-            # trial_C_alg[e] = (
-            #     C_alg
-            # )
-
-            # trial_resistance[e] = (
-            #     resistance_new
-            # )
-
-            # trial_rss[e] = (
-            #     rss
-            # )
-
-            # trial_cp_residual[e] = (
-            #     cp_res
-            # )
-
-            # trial_cp_iterations[e] = (
-            #     cp_niter
-            # )
-
-            # # ------------------------------------------------
-            # # Accumulated scalar slip
-            # #
-            # # This is cumulative over load increments:
-            # #
-            # # accumulated slip =
-            # # previous accumulated slip
-            # # + sum(abs(dgamma))
-            # # ------------------------------------------------
-
-            # trial_accumulated[e] = (
-            #     accumulated_backup[e]
-            #     + np.sum(np.abs(dgamma))
-            # )
-
-            # # ------------------------------------------------------------
-            # # Per-slip-system accumulated slip
-            # # ------------------------------------------------------------
-            
-            # trial_accumulated_slip_system[e] = (
-            #     accumulated_slip_system_committed[e]
-            #     + np.abs(dgamma)
-            # )
-
-
-
-
-
-
-
             # Store local CP convergence status
             trial_cp_converged[e] = cp_ok
-
+            
             # ------------------------------------------------
             # Check local constitutive convergence
             # ------------------------------------------------
@@ -10004,6 +9211,23 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
 
                 global_converged = False
                 break
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+ 
+
+
+
+
+
+            
 
             # ------------------------------------------------
             # Store local trial state
@@ -10046,10 +9270,10 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
             # ------------------------------------------------
             # Accumulated scalar slip
             #
-            # Cumulative over load increments:
+            # This is cumulative over load increments:
             #
             # accumulated slip =
-            # committed accumulated slip
+            # previous accumulated slip
             # + sum(abs(dgamma))
             # ------------------------------------------------
 
@@ -10058,18 +9282,23 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
                 + np.sum(np.abs(dgamma))
             )
 
-            # ------------------------------------------------
+            # ------------------------------------------------------------
             # Per-slip-system accumulated slip
-            #
-            # IMPORTANT:
-            # Always start from the committed state at the
-            # beginning of THIS global load increment.
-            # ------------------------------------------------
+            # ------------------------------------------------------------
+            
+            # trial_accumulated_slip_system[e] = (
+            #     accumulated_slip_system_committed[e]
+            #     + np.abs(dgamma)
+            # )
+
+
 
             trial_accumulated_slip_system[e] = (
                 accumulated_slip_system_backup[e]
                 + np.abs(dgamma)
             )
+
+
 
 
 
@@ -10212,59 +9441,17 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
         #     (n_elements,24,24)
         # ----------------------------------------------------
 
-        # Ke_alg_all = np.einsum(
-        #     "ia,eij,jb->eab",
-        #     B,
-        #     trial_C_alg,
-        #     B,
-        #     optimize=True
-        # )
-
-        # Ke_alg_all *= (
-        #     element_volume
-        # )
-
-        
-        # ----------------------------------------------------
-        # Element algorithmic stiffness
-        #
-        # Ke = B^T C_alg B * V
-        #
-        # MEMORY-SAFE BLOCKED ASSEMBLY
-        # ----------------------------------------------------
-        
-        TANGENT_BLOCK_SIZE = 500
-        
-        Ke_alg_all = np.empty(
-            (n_elements, 24, 24),
-            dtype=np.float64
+        Ke_alg_all = np.einsum(
+            "ia,eij,jb->eab",
+            B,
+            trial_C_alg,
+            B,
+            optimize=True
         )
-        
-        for e0 in range(0, n_elements, TANGENT_BLOCK_SIZE):
-        
-            e1 = min(
-                e0 + TANGENT_BLOCK_SIZE,
-                n_elements
-            )
-        
-            Ke_alg_all[e0:e1] = np.einsum(
-                "ia,eij,jb->eab",
-                B,
-                trial_C_alg[e0:e1],
-                B,
-                optimize=True
-            )
-        
-        Ke_alg_all *= element_volume
 
-
-
-
-
-
-
-
-        
+        Ke_alg_all *= (
+            element_volume
+        )
 
         # ----------------------------------------------------
         # Sparse global assembly using COO
@@ -10298,100 +9485,42 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
             - tangent_start
         )
 
-        # # ====================================================
-        # # GLOBAL FACTORIZATION
-        # # ====================================================
-
-        # factor_start = time.time()
-
-        
-        # if K_solver_alg is not None:
-        #     del K_solver_alg
-        
-        # import gc
-        # gc.collect()
-
-
-
-        # try:
-
-        #     # K_solver_alg = splu(
-        #     #     K_ff_alg
-        #     # )
-
-
-
-            
-        #     K_solver_alg = splu(
-        #         K_ff_alg,
-        #         permc_spec="MMD_AT_PLUS_A",
-        #         diag_pivot_thresh=0.0
-        #     )
-
-
-
-
-
-        # except RuntimeError as err:
-        
-        #     print()
-        #     print("Algorithmic tangent factorization failed:")
-        #     print(err)
-        #     raise
-        
-        # print(
-        #     f"K_alg factorization = "
-        #     f"{time.time() - factor_start:.3f} s"
-        # )
-        #             global_converged = False
-        #             break
-        
-        #         runtime_stats["factorization_total"] += (
-        #             time.time()
-        #             - factor_start
-        #         )
-
-
-
-
-
-
         # ====================================================
         # GLOBAL FACTORIZATION
         # ====================================================
-        
+
         factor_start = time.time()
-        
-        if K_solver_alg is not None:
-            del K_solver_alg
-        
-        import gc
-        gc.collect()
-        
+
         try:
-        
+
             K_solver_alg = splu(
-                K_ff_alg,
-                permc_spec="MMD_AT_PLUS_A",
-                diag_pivot_thresh=0.0
+                K_ff_alg
             )
-        
+
         except RuntimeError as err:
-        
+
             print()
-            print("Algorithmic tangent factorization failed:")
-            print(err)
-            raise
-        
-        print(
-            f"K_alg factorization = "
-            f"{time.time() - factor_start:.3f} s"
-        )
+            print(
+                "------------------------------------------------"
+            )
+            print(
+                "GLOBAL SPARSE FACTORIZATION FAILED"
+            )
+            print(
+                f"Load step       : {step}"
+            )
+            print(
+                f"Global iteration: {global_iter}"
+            )
+            print(
+                f"Error           : {err}"
+            )
+            print(
+                "------------------------------------------------"
+            )
 
-
-        # global_converged = False
-        # break
-
+            global_converged = False
+            break
 
         runtime_stats["factorization_total"] += (
             time.time()
@@ -10475,51 +9604,49 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
                 f"{global_iter_elapsed:.3f} s"
             )
 
-
-
     # ========================================================
     # END GLOBAL NEWTON ITERATION
     # ========================================================
-    
+
     # --------------------------------------------------------
     # If global convergence failed, reduce load increment
     # --------------------------------------------------------
-    
+
     if not global_converged:
-    
+
         # ----------------------------------------------------
         # Restore committed state
         # ----------------------------------------------------
-    
+
         U = U_backup.copy()
-    
+
         plastic_strain_committed = (
             plastic_backup.copy()
         )
-    
+
         resistance_committed = (
             resistance_backup.copy()
         )
-    
+
         accumulated_slip_committed = (
             accumulated_backup.copy()
         )
-    
+
         cp_x_committed = (
             cp_x_backup.copy()
         )
-    
+
         # ----------------------------------------------------
         # Reduce strain increment
         # ----------------------------------------------------
-    
+
         old_strain_step = strain_step
-    
+
         strain_step = max(
             strain_step * 0.5,
             MIN_STRAIN_STEP
         )
-    
+
         print()
         print(
             "======================================================"
@@ -10535,83 +9662,101 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
         print(
             "======================================================"
         )
-    
+
         # ----------------------------------------------------
         # If already at minimum increment, stop.
         # ----------------------------------------------------
-    
+
         if (
             old_strain_step
             <= MIN_STRAIN_STEP
             + 1.0e-15
         ):
-    
+
             raise RuntimeError(
                 "Global FE–CPFEM solver failed "
                 "at the minimum strain increment."
             )
-    
-        # ----------------------------------------------------
+
         # Do not advance current_strain.
         # Retry the same load target.
-        # ----------------------------------------------------
-    
         step -= 1
-    
+
         continue
+
+    # # ========================================================
+    # # COMMIT CONVERGED STATE
+    # # ========================================================
+
+    # U = U_iter.copy()
+
+    # plastic_strain_committed = (
+    #     trial_plastic.copy()
+    # )
+
+    # resistance_committed = (
+    #     trial_resistance.copy()
+    # )
+
+    # accumulated_slip_committed = (
+    #     trial_accumulated.copy()
+    # )
+
+    # cp_x_committed = (
+    #     trial_slip.copy()
+    # )
+
+    # current_strain = (
+    #     target_strain
+    # )
+
+    # # ========================================================
+    # # STORE CONVERGED LOCAL TOTAL STRAIN
+    # # ========================================================
     
-
-
-
-
-
-
-
-
+    # trial_total_strain = strain_all.copy()
 
 
 
     # ========================================================
     # COMMIT CONVERGED STATE
     # ========================================================
-    #
-    # This section is reached ONLY if global Newton convergence
-    # was achieved.
-    #
-    # Therefore all fields below represent the physical
-    # converged state of this load step.
-    # ========================================================
     
+    # U = U_iter.copy()
+    
+    # plastic_strain_committed = (
+    #     trial_plastic.copy()
+    # )
+    
+    # resistance_committed = (
+    #     trial_resistance.copy()
+    # )
+    
+    # accumulated_slip_committed = (
+    #     trial_accumulated.copy()
+    # )
+    
+    # cp_x_committed = (
+    #     trial_slip.copy()
+    # )
+    
+    # current_strain = (
+    #     target_strain
+    # )
+
     U = U_iter.copy()
     
-    plastic_strain_committed = (
-        trial_plastic.copy()
+    plastic_strain_committed = trial_plastic.copy()
+    resistance_committed = trial_resistance.copy()
+    accumulated_slip_committed = trial_accumulated.copy()
+
+    accumulated_slip_system_committed = (
+        trial_accumulated_slip_system.copy()
     )
+    cp_x_committed = trial_slip.copy()
     
-    resistance_committed = (
-        trial_resistance.copy()
-    )
-    
-    accumulated_slip_committed = (
-        trial_accumulated.copy()
-    )
-    
-    cp_x_committed = (
-        trial_slip.copy()
-    )
-    
-    current_strain = (
-        target_strain
-    )
-    
-    
-    # ========================================================
-    # STORE CONVERGED LOCAL TOTAL STRAIN
-    # ========================================================
-    
-    trial_total_strain = (
-        strain_all.copy()
-    )
+    current_strain = target_strain
+
     
     
     # ========================================================
@@ -10622,62 +9767,31 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
     # Newton trial states are NOT stored.
     # ========================================================
     
+    trial_total_strain = strain_all.copy()
+
+    
     local_field_history.append(
         {
-            "total_strain_voigt":
-                trial_total_strain.copy(),
-    
-            "stress_voigt":
-                trial_stress_voigt.copy(),
-    
-            "stress":
-                trial_stress.copy(),
-    
-            "plastic_strain":
-                trial_plastic.copy(),
-    
-            "resistance":
-                trial_resistance.copy(),
-    
-            "accumulated_slip":
-                trial_accumulated.copy(),
-    
+            "total_strain_voigt": trial_total_strain.copy(),
+            "stress_voigt": trial_stress_voigt.copy(),
+            "stress": trial_stress.copy(),
+            "plastic_strain": trial_plastic.copy(),
+            "resistance": trial_resistance.copy(),
+            # "accumulated_slip": trial_accumulated.copy(),
+            "accumulated_slip": trial_accumulated.copy(),
+            
             "accumulated_slip_system":
                 trial_accumulated_slip_system.copy(),
-    
-            "slip":
-                trial_slip.copy(),
-    
-            "rss":
-                trial_rss.copy(),
-    
-            "cp_residual":
-                trial_cp_residual.copy(),
-    
-            "cp_iterations":
-                trial_cp_iterations.copy(),
-    
-            "cp_converged":
-                trial_cp_converged.copy()
+
+
+
+            
+            "slip": trial_slip.copy(),
+            "rss": trial_rss.copy(),
+            "cp_residual": trial_cp_residual.copy(),
+            "cp_iterations": trial_cp_iterations.copy(),
+            "cp_converged": trial_cp_converged.copy()
         }
-    )
-    
-    
-    # ========================================================
-    # STORE CONVERGED STEP / CYCLE INFORMATION
-    # ========================================================
-    
-    local_field_cycle_history.append(
-        int(
-            max(
-                1,
-                int(
-                    np.ceil(
-                        (cyclic_segment + 1) / 3.0
-                    )
-                )
-            )
-        )
     )
     
     local_field_step_history.append(
@@ -10692,48 +9806,57 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
     # ========================================================
     # MACROSCOPIC RESPONSE
     # ========================================================
-    
+
+
+
+
+
+
+
+
+    # ========================================================
+    # MACROSCOPIC RESPONSE
+    # ========================================================
+
     # --------------------------------------------------------
     # Average stress tensor
     # --------------------------------------------------------
-    
+
     sigma_tensor_average = np.mean(
         trial_stress,
         axis=0
     )
-    
+
     sigma_macro = (
         sigma_tensor_average[2, 2]
     )
-    
-    
+
     # --------------------------------------------------------
     # Maximum RSS in the microstructure
     # --------------------------------------------------------
-    
+
     max_rss = np.max(
         np.abs(trial_rss)
     )
-    
-    
+
     # --------------------------------------------------------
     # Mean CRSS
     # --------------------------------------------------------
-    
+
     mean_crss = np.mean(
         resistance_committed
     )
-    
-    
+
     # --------------------------------------------------------
     # Mean plastic strain magnitude
     #
     # NOTE:
     # This is the Frobenius norm of the plastic strain tensor.
     # It is NOT the J2 equivalent plastic strain.
-    # J2 equivalent plastic strain is calculated later.
+    # We will calculate J2 equivalent plastic strain separately
+    # in the post-processing section.
     # --------------------------------------------------------
-    
+
     plastic_strain_norm = np.sqrt(
         np.einsum(
             "eij,eij->e",
@@ -10741,196 +9864,275 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
             plastic_strain_committed
         )
     )
-    
+
     mean_plastic_strain = np.mean(
         plastic_strain_norm
     )
-    
-    
+
     # --------------------------------------------------------
     # Mean accumulated slip
     # --------------------------------------------------------
-    
+
     mean_accumulated_slip = np.mean(
         accumulated_slip_committed
     )
-    
-    
+
     # --------------------------------------------------------
     # CP iteration statistics
     # --------------------------------------------------------
-    
+
     mean_cp_iterations = np.mean(
         trial_cp_iterations
     )
-    
+
     max_cp_iterations = np.max(
         trial_cp_iterations
     )
-    
+
     max_cp_residual = np.max(
         trial_cp_residual
     )
-    
-    
+
     # ========================================================
     # STORE GLOBAL HISTORY
     # ========================================================
-    
+
     global_strain_history.append(
         current_strain
     )
-    
+
     global_stress_history.append(
         sigma_macro
     )
-    
+
     step_history.append(
         step
     )
-    
-    cyclic_segment_history.append(
-        cyclic_segment + 1
-    )
-    
-    cyclic_direction_history.append(
-        cyclic_direction
-    )
-    
-    
-    # ========================================================
-    # STORE GLOBAL CP STATISTICS
-    # ========================================================
-    
+
+    # --------------------------------------------------------
+    # Store useful global CP statistics
+    # --------------------------------------------------------
+
     cp_state_history.append(
         {
-            "strain":
-                current_strain,
-    
-            "stress":
-                sigma_macro,
-    
-            "mean_crss":
-                mean_crss,
-    
-            "max_rss":
-                max_rss,
-    
-            "mean_plastic_strain":
-                mean_plastic_strain,
-    
-            "mean_accumulated_slip":
-                mean_accumulated_slip,
-    
-            "mean_cp_iterations":
-                mean_cp_iterations,
-    
-            "max_cp_iterations":
-                max_cp_iterations,
-    
-            "max_cp_residual":
-                max_cp_residual,
-    
-            "global_iterations":
-                global_iter,
-    
-            "relative_residual":
-                relative_residual,
-    
-            "residual_norm":
-                residual_norm,
-    
-            # Cyclic information
-            "cyclic_segment":
-                cyclic_segment + 1,
-    
-            "cyclic_direction":
-                cyclic_direction,
-    
-            "segment_target":
-                segment_target
+            "strain": current_strain,
+            "stress": sigma_macro,
+            "mean_crss": mean_crss,
+            "max_rss": max_rss,
+            "mean_plastic_strain": mean_plastic_strain,
+            "mean_accumulated_slip": mean_accumulated_slip,
+            "mean_cp_iterations": mean_cp_iterations,
+            "max_cp_iterations": max_cp_iterations,
+            "max_cp_residual": max_cp_residual,
+            "global_iterations": global_iter,
+            "relative_residual": relative_residual,
+            "residual_norm": residual_norm
         }
     )
-    
-    
+
+
     # ========================================================
-    # SAVE STEPWISE CONVERGED CHECKPOINT
-    # ========================================================
-    #
-    # IMPORTANT:
-    #
-    # This is AFTER:
-    #   1. Global Newton convergence
-    #   2. State commitment
-    #   3. Local-field storage
-    #   4. Macroscopic stress calculation
-    #   5. Global history storage
-    #
-    # Therefore this checkpoint contains a complete,
-    # physically converged state for this load step.
-    #
-    # Failed Newton iterations are NOT saved.
+    # APPEND ONE CONVERGED TENSILE HISTORY ROW
     # ========================================================
     
-    checkpoint_file = save_converged_checkpoint(
+    max_equiv_plastic_strain = np.max(
+        trial_equiv_plastic_strain
+    )
     
-        step=step,
+    # max_accumulated_slip = np.max(
+    #     accumulated_slip_committed
+    # )
+
+    max_accumulated_slip = np.max(
+        trial_accumulated
+    )
+
+
+
     
-        cycle=local_field_cycle_history[-1],
+    max_rss_over_crss = np.max(
+        np.abs(trial_rss)
+        /
+        np.maximum(
+            trial_resistance,
+            1.0e-12
+        )
+    )
     
-        cyclic_segment=cyclic_segment + 1,
+    with open(
+        TENSILE_HISTORY_FILE,
+        "a",
+        newline=""
+    ) as f:
     
-        cyclic_direction=cyclic_direction,
+        writer = csv.writer(f)
     
-        current_strain=current_strain,
+        # writer.writerow([
+        #     step,
+        #     current_strain,
+        #     sigma_macro,
+        #     mean_crss,
+        #     max_rss,
+        #     mean_plastic_strain,
+        #     mean_accumulated_slip,
+        #     max_equiv_plastic_strain,
+        #     max_accumulated_slip,
+        #     max_rss_over_crss,
+        #     global_iter,
+        #     int(max_cp_iterations),
+        #     max_cp_residual
+        # ])
+
+
+        writer.writerow([
+            step,
+            current_strain,
+            sigma_macro,
+            mean_crss,
+            max_rss,
+            np.mean(trial_equiv_plastic_strain),
+            np.max(trial_equiv_plastic_strain),
+            np.mean(trial_accumulated),
+            np.max(trial_accumulated),
+            max_rss_over_crss,
+            global_iter,
+            int(max_cp_iterations),
+            max_cp_residual
+        ])
+
+
+
+
+
+    # ========================================================
+    # SAVE CONVERGED LOCAL CHECKPOINT
+    # ========================================================
     
-        segment_target=segment_target,
+    checkpoint_file = os.path.join(
+        CHECKPOINT_DIR,
+        f"step_{step:04d}.npz"
+    )
     
-        sigma_macro=sigma_macro,
+    np.savez_compressed(
+        checkpoint_file,
     
-        strain_all=trial_total_strain,
+        # ----------------------------------------------------
+        # GLOBAL STATE
+        # ----------------------------------------------------
+        step=np.int32(step),
+        strain=np.float64(current_strain),
+        stress_MPa=np.float64(sigma_macro),
     
-        stress=trial_stress,
+        # ----------------------------------------------------
+        # LOCAL STRAIN
+        # ----------------------------------------------------
+        total_strain_voigt=
+            strain_all.astype(np.float32),
     
-        stress_voigt=trial_stress_voigt,
+        equiv_total_strain=
+            trial_equiv_total_strain.astype(np.float32),
     
+        # ----------------------------------------------------
+        # LOCAL STRESS
+        # ----------------------------------------------------
+        stress=
+            trial_stress.astype(np.float32),
+    
+        stress_voigt=
+            trial_stress_voigt.astype(np.float32),
+    
+        equiv_stress=
+            trial_equiv_stress.astype(np.float32),
+    
+        # ----------------------------------------------------
+        # LOCAL PLASTICITY
+        # # ----------------------------------------------------
+        # plastic_strain=
+        #     plastic_strain_committed.astype(np.float32),
+
+
         plastic_strain=
-            plastic_strain_committed,
+            trial_plastic.astype(np.float32),
     
-        resistance=
-            resistance_committed,
+        equiv_plastic_strain=
+            trial_equiv_plastic_strain.astype(np.float32),
     
+        # ----------------------------------------------------
+        # SLIP
+        # ----------------------------------------------------
+        # accumulated_slip=
+        #     accumulated_slip_committed.astype(np.float32),
+
         accumulated_slip=
-            accumulated_slip_committed,
+            trial_accumulated.astype(np.float32),
+
+        
     
+        # accumulated_slip_system=
+        #     accumulated_slip_system_committed.astype(
+        #         np.float32
+        #     ),
+        
         accumulated_slip_system=
-            trial_accumulated_slip_system,
+            trial_accumulated_slip_system.astype(
+                np.float32
+            ),
+
+        
     
+        # slip_increment=
+        #     cp_x_committed.astype(np.float32),
+
+
         slip_increment=
-            cp_x_committed,
+            trial_slip.astype(np.float32),
+
+        
     
-        rss=trial_rss,
+        # ----------------------------------------------------
+        # RSS / CRSS
+        # ----------------------------------------------------
+        resistance=
+            resistance_committed.astype(np.float32),
     
-        cp_residual=trial_cp_residual,
+        rss=
+            trial_rss.astype(np.float32),
     
-        cp_iterations=trial_cp_iterations,
+        max_abs_rss=
+            trial_max_abs_rss.astype(np.float32),
     
-        cp_converged=trial_cp_converged,
+        max_rss_system=
+            trial_max_rss_system.astype(np.int16),
     
-        element_grain=element_grain,
+        # ----------------------------------------------------
+        # CP CONVERGENCE
+        # ----------------------------------------------------
+        cp_residual=
+            trial_cp_residual.astype(np.float32),
     
-        element_centers=element_centers
+        cp_iterations=
+            trial_cp_iterations.astype(np.int16),
+    
+        cp_converged=
+            trial_cp_converged.astype(bool),
+    
+        # ----------------------------------------------------
+        # ELEMENT / GRAIN INFORMATION
+        # ----------------------------------------------------
+        element_grain=
+            element_grain.astype(np.int32),
+    
+        element_centers=
+            element_centers.astype(np.float32),
+    
+        element_orientation=
+            element_orientation.astype(np.float32),
+    
+        element_euler=
+            element_euler.astype(np.float32)
     )
-    
-    
-    print(
-        f"STEPWISE CHECKPOINT SAVED: "
-        f"{checkpoint_file}"
-    )
-    
 
 
-    
 
     # ========================================================
     # LOAD STEP OUTPUT
@@ -10949,34 +10151,6 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
         f"Current strain          = "
         f"{current_strain:.8e}"
     )
-
-    print(
-        f"Cyclic segment          = "
-        f"{cyclic_segment + 1}"
-    )
-    
-    print(
-        f"Loading direction       = "
-        f"{'LOADING' if cyclic_direction > 0 else 'UNLOADING'}"
-    )
-    
-    print(
-        f"Segment target          = "
-        f"{segment_target:.8e}"
-    )
-    
-    print(
-        f"Strain increment        = "
-        f"{actual_increment:.8e}"
-    )
-
-
-
-
-
-
-
-
 
     print(
         f"Axial stress            = "
@@ -11056,73 +10230,17 @@ while current_strain < MAX_TENSILE_STRAIN - 1.0e-14:
     # Make sure the next step does not exceed TOTAL_STRAIN
     # --------------------------------------------------------
 
-    # strain_step = min(
-    #     strain_step,
-    #     TOTAL_STRAIN - current_strain
-    # )
-
-    # # --------------------------------------------------------
-    # # Safety against zero/negative next increment
-    # # --------------------------------------------------------
-
-    # if strain_step <= 0.0:
-    #     break
-
-
-    # ========================================================
-    # ADAPTIVE STRAIN-INCREMENT CONTROL
-    # ========================================================
-    
-    if global_iter <= 4:
-    
-        strain_step = min(
-            strain_step * 1.50,
-            MAX_STRAIN_STEP
-        )
-    
-    elif global_iter <= 8:
-    
-        strain_step = min(
-            strain_step * 1.25,
-            MAX_STRAIN_STEP
-        )
-    
-    elif global_iter >= 15:
-    
-        strain_step = max(
-            strain_step * 0.75,
-            MIN_STRAIN_STEP
-        )
-    
-    # --------------------------------------------------------
-    # Limit next increment to the current segment target
-    # --------------------------------------------------------
-    
-    distance_to_target = abs(
-        segment_target - current_strain
-    )
-    
     strain_step = min(
         strain_step,
-        distance_to_target
+        TOTAL_STRAIN - current_strain
     )
-    
-    # --------------------------------------------------------
-    # Segment completed
-    # --------------------------------------------------------
-    
-    if distance_to_target <= 1.0e-14:
-    
-        cyclic_segment += 1
-    
-        if cyclic_segment >= len(cyclic_targets):
-            break
-    
-        # Reset increment at reversal point
-        strain_step = INITIAL_STRAIN_STEP
-    
-    
 
+    # --------------------------------------------------------
+    # Safety against zero/negative next increment
+    # --------------------------------------------------------
+
+    if strain_step <= 0.0:
+        break
 
 
 
@@ -11307,51 +10425,6 @@ local_max_abs_rss_history = np.max(
     axis=-1
 )
 
-
-
-# ========================================================
-# LOCAL YIELD / SLIP UTILIZATION RATIO
-# ========================================================
-
-yield_ratio_history = np.zeros_like(
-    local_rss_history
-)
-
-valid_crss = (
-    local_crss_history > 1.0e-14
-)
-
-yield_ratio_history[valid_crss] = (
-    np.abs(local_rss_history[valid_crss])
-    /
-    local_crss_history[valid_crss]
-)
-
-local_max_yield_ratio_history = np.max(
-    yield_ratio_history,
-    axis=-1
-)
-
-local_active_slip_count_history = np.sum(
-    yield_ratio_history >= 1.0,
-    axis=-1
-)
-
-local_yielded_element_count_history = np.sum(
-    local_max_yield_ratio_history >= 1.0,
-    axis=-1
-)
-
-local_yielded_element_fraction_history = (
-    local_yielded_element_count_history
-    / n_elements
-)
-
-
-
-
-
-
 # Slip-system index corresponding to maximum |RSS|
 local_max_rss_system_history = np.argmax(
     np.abs(local_rss_history),
@@ -11492,7 +10565,39 @@ element_centers = np.mean(
     axis=1
 )
 
+# ------------------------------------------------
+# Distance to nearest free surface
+# ------------------------------------------------
 
+element_surface_distance = np.min(
+    np.column_stack([
+        element_centers[:, 0],
+        Lx - element_centers[:, 0],
+        element_centers[:, 1],
+        Ly - element_centers[:, 1],
+        element_centers[:, 2],
+        Lz - element_centers[:, 2]
+    ]),
+    axis=1
+)
+
+
+
+critical_element_center = (
+    element_centers[critical_element_id]
+)
+
+critical_rss_element_center = (
+    element_centers[critical_rss_element_id]
+)
+
+critical_grain_center = (
+    grain_centers[critical_grain_id]
+)
+
+critical_rss_grain_center = (
+    grain_centers[critical_rss_grain_id]
+)
 # ================================================================
 # GRAIN-LEVEL STATISTICS
 # ================================================================
@@ -11758,1017 +10863,15 @@ print("=" * 70)
 # )
 
 
-
-
-
-
-# ================================================================
-# FATIGUE INDICATOR / FIP CALCULATION
-# ================================================================
-#
-# All calculations are performed AFTER the converged FE–CPFEM
-# simulation using the complete physical load-step history.
-#
-# Dimensions:
-#
-#   n_history = number of converged load steps
-#   n_elements = 8000
-#   n_slip = 12
-#
-# The FIPs are calculated for every element and every FCC
-# slip system.
-# ================================================================
-
-print()
-print("=" * 70)
-print("CALCULATING MULTIPLE FATIGUE INDICATORS")
-print("=" * 70)
-
-
-n_history = local_stress_history.shape[0]
-n_slip = 12
-
-
-# ------------------------------------------------
-# 1. Build stress normal to each slip plane
-# ------------------------------------------------
-#
-# sigma_n = n · sigma · n
-#
-# Shape:
-#   (history, element, slip_system)
-# ------------------------------------------------
-
-normal_stress_history = np.einsum(
-    "heij,eaj,eai->hea",
-    local_stress_history,
-    element_normals,
-    element_normals,
-    optimize=True
-)
-
-
-# ------------------------------------------------
-# 2. Build normal strain on each slip plane
-# ------------------------------------------------
-#
-# Engineering-strain Voigt:
-#
-# [xx, yy, zz, gamma_xy, gamma_yz, gamma_xz]
-#
-# Convert to tensor form first.
-# ------------------------------------------------
-
-eps = local_total_strain_history
-
-strain_tensor_history = np.zeros(
-    (
-        n_history,
-        n_elements,
-        3,
-        3
-    ),
-    dtype=np.float64
-)
-
-strain_tensor_history[..., 0, 0] = eps[..., 0]
-strain_tensor_history[..., 1, 1] = eps[..., 1]
-strain_tensor_history[..., 2, 2] = eps[..., 2]
-
-strain_tensor_history[..., 0, 1] = eps[..., 3] / 2.0
-strain_tensor_history[..., 1, 0] = eps[..., 3] / 2.0
-
-strain_tensor_history[..., 1, 2] = eps[..., 4] / 2.0
-strain_tensor_history[..., 2, 1] = eps[..., 4] / 2.0
-
-strain_tensor_history[..., 0, 2] = eps[..., 5] / 2.0
-strain_tensor_history[..., 2, 0] = eps[..., 5] / 2.0
-
-
-normal_strain_history = np.einsum(
-    "heij,eaj,eai->hea",
-    strain_tensor_history,
-    element_normals,
-    element_normals,
-    optimize=True
-)
-
-
-# ------------------------------------------------
-# 3. Signed cumulative slip
-# ------------------------------------------------
-#
-# local_accumulated_slip_system_history contains
-# accumulated ABSOLUTE slip.
-#
-# For fatigue we need signed cyclic slip.
-#
-# Therefore reconstruct:
-#
-# gamma_signed(N)
-#     = cumulative sum of dgamma
-#
-# ------------------------------------------------
-
-signed_slip_history = np.cumsum(
-    local_slip_increment_history,
-    axis=0
-)
-
-
-# ================================================================
-# CYCLE BOUNDARIES
-# ================================================================
-
-segment_history = np.asarray(
-    cyclic_segment_history,
-    dtype=np.int32
-)
-
-direction_history = np.asarray(
-    cyclic_direction_history,
-    dtype=np.int32
-)
-
-# Segment numbering in cp_state_history starts at 1.
-#
-# A complete cycle is represented by:
-#
-#   segment 1: 0       -> maximum
-#   segment 2: maximum -> minimum
-#   segment 3: minimum -> maximum
-#
-# Then the next cycle repeats segments 4-6, etc.
-
-
-cycle_numbers = np.zeros(
-    n_history,
-    dtype=np.int32
-)
-
-for i in range(n_history):
-
-    seg = int(
-        segment_history[i]
-    )
-
-    if seg <= 3:
-        cycle_numbers[i] = 1
-    else:
-        cycle_numbers[i] = (
-            (seg - 1) // 3
-            + 1
-        )
-
-
-n_completed_cycles = int(
-    np.max(cycle_numbers)
-)
-
-
-print(
-    "Number of converged load steps =",
-    n_history
-)
-
-print(
-    "Number of detected cycles =",
-    n_completed_cycles
-)
-
-
-# ================================================================
-# STORAGE FOR CYCLE-LEVEL FIPs
-# ================================================================
-
-fip_CPS_history = []
-fip_PD_history = []
-fip_FS_history = []
-fip_BM_history = []
-fip_SWT_history = []
-fip_J2_history = []
-
-
-# Raw components are also saved so that the empirical
-# coefficients can be changed later without rerunning CPFEM.
-
-fip_FS_shear_history = []
-fip_FS_normal_history = []
-
-fip_BM_shear_history = []
-fip_BM_normal_history = []
-
-
-critical_CPS_element_history = []
-critical_CPS_grain_history = []
-critical_CPS_slip_system_history = []
-
-critical_PD_element_history = []
-critical_PD_grain_history = []
-critical_PD_slip_system_history = []
-
-critical_FS_element_history = []
-critical_FS_grain_history = []
-critical_FS_slip_system_history = []
-
-critical_BM_element_history = []
-critical_BM_grain_history = []
-critical_BM_slip_system_history = []
-
-critical_SWT_element_history = []
-critical_SWT_grain_history = []
-critical_SWT_slip_system_history = []
-
-critical_J2_element_history = []
-critical_J2_grain_history = []
-
-
-# ================================================================
-# CYCLE-BY-CYCLE CALCULATION
-# ================================================================
-
-for cycle_id in range(
-    1,
-    n_completed_cycles + 1
-):
-
-    cycle_mask = (
-        cycle_numbers == cycle_id
-    )
-
-    cycle_indices = np.where(
-        cycle_mask
-    )[0]
-
-    if len(cycle_indices) < 2:
-        continue
-
-    i0 = cycle_indices[0]
-    i1 = cycle_indices[-1]
-
-    print()
-    print(
-        f"Calculating FIPs for cycle "
-        f"{cycle_id}"
-    )
-
-    # ------------------------------------------------------------
-    # Cycle-local history
-    # ------------------------------------------------------------
-
-    gamma_cycle = (
-        signed_slip_history[
-            cycle_indices
-        ]
-    )
-
-    sigma_n_cycle = (
-        normal_stress_history[
-            cycle_indices
-        ]
-    )
-
-    eps_n_cycle = (
-        normal_strain_history[
-            cycle_indices
-        ]
-    )
-
-    stress_cycle = (
-        local_stress_history[
-            cycle_indices
-        ]
-    )
-
-    plastic_cycle = (
-        local_plastic_strain_history[
-            cycle_indices
-        ]
-    )
-
-
-    # ============================================================
-    # 1. CUMULATIVE PLASTIC SLIP
-    # ============================================================
-    #
-    # Total absolute slip accumulated during this cycle.
-    #
-    # This is a direct slip-activity indicator.
-    # ============================================================
-
-    gamma_increment_cycle = (
-        local_slip_increment_history[
-            cycle_indices
-        ]
-    )
-
-    CPS = np.sum(
-        np.abs(
-            gamma_increment_cycle
-        ),
-        axis=0
-    )
-
-    CPS_max_index = np.unravel_index(
-        np.argmax(CPS),
-        CPS.shape
-    )
-
-    e_CPS, a_CPS = CPS_max_index
-
-    fip_CPS_history.append(
-        CPS.copy()
-    )
-
-    critical_CPS_element_history.append(
-        e_CPS
-    )
-
-    critical_CPS_grain_history.append(
-        element_grain[e_CPS]
-    )
-
-    critical_CPS_slip_system_history.append(
-        a_CPS
-    )
-
-
-    # ============================================================
-    # 2. FATIGUE PLASTIC DISSIPATION
-    # ============================================================
-    #
-    # Wp = integral sigma : d(eps_p)
-    #
-    # Trapezoidal integration over converged load steps.
-    #
-    # Units: MPa
-    # ============================================================
-
-    dplastic = (
-        plastic_cycle[1:]
-        -
-        plastic_cycle[:-1]
-    )
-
-    sigma_mid = (
-        0.5
-        *
-        (
-            stress_cycle[1:]
-            +
-            stress_cycle[:-1]
-        )
-    )
-
-    plastic_work_increment = np.einsum(
-        "heij,heij->he",
-        sigma_mid,
-        dplastic
-    )
-
-    PD = np.sum(
-        plastic_work_increment,
-        axis=0
-    )
-
-    # Use absolute cycle dissipation because numerical
-    # integration over a closed loop can contain small
-    # sign errors.
-    PD = np.abs(PD)
-
-    e_PD = np.argmax(PD)
-
-    fip_PD_cycle = PD.copy()
-
-    fip_PD_history.append(
-        fip_PD_cycle
-    )
-
-    critical_PD_element_history.append(
-        e_PD
-    )
-
-    critical_PD_grain_history.append(
-        element_grain[e_PD]
-    )
-
-    # PD is element-based, not slip-system-based.
-    critical_PD_slip_system_history.append(
-        -1
-    )
-
-
-    # ============================================================
-    # 3. FATEMI–SOCIE
-    # ============================================================
-    #
-    # Raw shear term:
-    #
-    #     Delta_gamma / 2
-    #
-    # Normal-stress correction:
-    #
-    #     1 + k * sigma_n,max / sigma_ref
-    #
-    # ============================================================
-
-    gamma_range = (
-        np.max(
-            gamma_cycle,
-            axis=0
-        )
-        -
-        np.min(
-            gamma_cycle,
-            axis=0
-        )
-    )
-
-    gamma_half_range = (
-        0.5 * gamma_range
-    )
-
-    sigma_n_max = np.max(
-        sigma_n_cycle,
-        axis=0
-    )
-
-    fs_normal_factor = (
-        1.0
-        +
-        FS_K
-        *
-        sigma_n_max
-        /
-        max(
-            FS_SIGMA_REF,
-            1.0e-12
-        )
-    )
-
-    FS = (
-        gamma_half_range
-        *
-        fs_normal_factor
-    )
-
-    FS_shear = (
-        gamma_half_range
-    )
-
-    FS_normal = (
-        fs_normal_factor
-    )
-
-    fip_FS_history.append(
-        FS.copy()
-    )
-
-    fip_FS_shear_history.append(
-        FS_shear.copy()
-    )
-
-    fip_FS_normal_history.append(
-        FS_normal.copy()
-    )
-
-    e_FS, a_FS = np.unravel_index(
-        np.argmax(FS),
-        FS.shape
-    )
-
-    critical_FS_element_history.append(
-        e_FS
-    )
-
-    critical_FS_grain_history.append(
-        element_grain[e_FS]
-    )
-
-    critical_FS_slip_system_history.append(
-        a_FS
-    )
-
-
-    # ============================================================
-    # 4. BROWN–MILLER
-    # ============================================================
-    #
-    # Raw form:
-    #
-    #   BM = Delta_gamma/2
-    #        + C * Delta_epsilon_n
-    #
-    # We use the absolute normal-strain range.
-    #
-    # BM_C is explicitly exposed for later calibration.
-    # ============================================================
-
-    epsilon_n_range = (
-        np.max(
-            eps_n_cycle,
-            axis=0
-        )
-        -
-        np.min(
-            eps_n_cycle,
-            axis=0
-        )
-    )
-
-    BM_shear = (
-        gamma_half_range
-    )
-
-    BM_normal = (
-        epsilon_n_range
-    )
-
-    BM = (
-        BM_shear
-        +
-        BM_C
-        *
-        BM_normal
-    )
-
-    fip_BM_history.append(
-        BM.copy()
-    )
-
-    fip_BM_shear_history.append(
-        BM_shear.copy()
-    )
-
-    fip_BM_normal_history.append(
-        BM_normal.copy()
-    )
-
-    e_BM, a_BM = np.unravel_index(
-        np.argmax(BM),
-        BM.shape
-    )
-
-    critical_BM_element_history.append(
-        e_BM
-    )
-
-    critical_BM_grain_history.append(
-        element_grain[e_BM]
-    )
-
-    critical_BM_slip_system_history.append(
-        a_BM
-    )
-
-
-    # ============================================================
-    # 5. SMITH–WATSON–TOPPER
-    # ============================================================
-    #
-    # Crystallographic normal-strain version:
-    #
-    #   SWT = sigma_n,max * Delta_epsilon_n / 2
-    #
-    # Units: MPa
-    # ============================================================
-
-    SWT = (
-        sigma_n_max
-        *
-        0.5
-        *
-        epsilon_n_range
-    )
-
-    fip_SWT_history.append(
-        SWT.copy()
-    )
-
-    e_SWT, a_SWT = np.unravel_index(
-        np.argmax(SWT),
-        SWT.shape
-    )
-
-    critical_SWT_element_history.append(
-        e_SWT
-    )
-
-    critical_SWT_grain_history.append(
-        element_grain[e_SWT]
-    )
-
-    critical_SWT_slip_system_history.append(
-        a_SWT
-    )
-
-
-
-
-
-    # ============================================================
-    # 6. CYCLIC J2 PLASTIC STRAIN HALF-RANGE
-    # ============================================================
-    #
-    # Element-level equivalent plastic strain half-range.
-    # This provides a continuum-level baseline FIP.
-    # ============================================================
-
-
-
-
-
-
-
-
-
-    eps_p_eq_cycle = (
-        local_equiv_plastic_strain_history[
-            cycle_indices
-        ]
-    )
-
-    J2_range = (
-        np.max(
-            eps_p_eq_cycle,
-            axis=0
-        )
-        -
-        np.min(
-            eps_p_eq_cycle,
-            axis=0
-        )
-    )
-
-    J2_half_range = (
-        0.5 * J2_range
-    )
-
-    fip_J2_history.append(
-        J2_half_range.copy()
-    )
-
-    e_J2 = np.argmax(
-        J2_half_range
-    )
-
-    critical_J2_element_history.append(
-        e_J2
-    )
-
-    critical_J2_grain_history.append(
-        element_grain[e_J2]
-    )
-
-
-
-
-
-    # ============================================================
-    # PRINT CYCLE SUMMARY
-    # ============================================================
-
-    print(
-        f"Cycle {cycle_id}:"
-    )
-
-    print(
-        f"  Max CPS       = "
-        f"{np.max(CPS):.8e}"
-    )
-
-    print(
-        f"  Max PD        = "
-        f"{np.max(PD):.8e} MPa"
-    )
-
-    print(
-        f"  Max FS        = "
-        f"{np.max(FS):.8e}"
-    )
-
-    print(
-        f"  Max Brown-Miller = "
-        f"{np.max(BM):.8e}"
-    )
-
-    print(
-        f"  Max SWT       = "
-        f"{np.max(SWT):.8e} MPa"
-    )
-
-    print(
-        f"  Max J2 range/2 = "
-        f"{np.max(J2_half_range):.8e}"
-    )
-
-    print(
-        f"  Critical FS: "
-        f"element {e_FS}, "
-        f"grain {element_grain[e_FS]}, "
-        f"slip system {a_FS}"
-    )
-
-    print(
-        f"  Critical BM: "
-        f"element {e_BM}, "
-        f"grain {element_grain[e_BM]}, "
-        f"slip system {a_BM}"
-    )
-
-    print(
-        f"  Critical SWT: "
-        f"element {e_SWT}, "
-        f"grain {element_grain[e_SWT]}, "
-        f"slip system {a_SWT}"
-    )
-
-
-
-
-
-# ================================================================
-# CONVERT FIP HISTORIES TO ARRAYS
-# ================================================================
-
-fip_CPS_history = np.asarray(
-    fip_CPS_history,
-    dtype=np.float64
-)
-
-fip_PD_history = np.asarray(
-    fip_PD_history,
-    dtype=np.float64
-)
-
-fip_FS_history = np.asarray(
-    fip_FS_history,
-    dtype=np.float64
-)
-
-fip_BM_history = np.asarray(
-    fip_BM_history,
-    dtype=np.float64
-)
-
-fip_SWT_history = np.asarray(
-    fip_SWT_history,
-    dtype=np.float64
-)
-
-fip_J2_history = np.asarray(
-    fip_J2_history,
-    dtype=np.float64
-)
-
-fip_FS_shear_history = np.asarray(
-    fip_FS_shear_history,
-    dtype=np.float64
-)
-
-fip_FS_normal_history = np.asarray(
-    fip_FS_normal_history,
-    dtype=np.float64
-)
-
-fip_BM_shear_history = np.asarray(
-    fip_BM_shear_history,
-    dtype=np.float64
-)
-
-fip_BM_normal_history = np.asarray(
-    fip_BM_normal_history,
-    dtype=np.float64
-)
-
-
-critical_CPS_element_history = np.asarray(
-    critical_CPS_element_history,
-    dtype=np.int32
-)
-
-critical_CPS_grain_history = np.asarray(
-    critical_CPS_grain_history,
-    dtype=np.int32
-)
-
-critical_CPS_slip_system_history = np.asarray(
-    critical_CPS_slip_system_history,
-    dtype=np.int32
-)
-
-critical_PD_element_history = np.asarray(
-    critical_PD_element_history,
-    dtype=np.int32
-)
-
-critical_PD_grain_history = np.asarray(
-    critical_PD_grain_history,
-    dtype=np.int32
-)
-
-critical_FS_element_history = np.asarray(
-    critical_FS_element_history,
-    dtype=np.int32
-)
-
-critical_FS_grain_history = np.asarray(
-    critical_FS_grain_history,
-    dtype=np.int32
-)
-
-critical_FS_slip_system_history = np.asarray(
-    critical_FS_slip_system_history,
-    dtype=np.int32
-)
-
-critical_BM_element_history = np.asarray(
-    critical_BM_element_history,
-    dtype=np.int32
-)
-
-critical_BM_grain_history = np.asarray(
-    critical_BM_grain_history,
-    dtype=np.int32
-)
-
-critical_BM_slip_system_history = np.asarray(
-    critical_BM_slip_system_history,
-    dtype=np.int32
-)
-
-critical_SWT_element_history = np.asarray(
-    critical_SWT_element_history,
-    dtype=np.int32
-)
-
-critical_SWT_grain_history = np.asarray(
-    critical_SWT_grain_history,
-    dtype=np.int32
-)
-
-critical_SWT_slip_system_history = np.asarray(
-    critical_SWT_slip_system_history,
-    dtype=np.int32
-)
-
-critical_J2_element_history = np.asarray(
-    critical_J2_element_history,
-    dtype=np.int32
-)
-
-critical_J2_grain_history = np.asarray(
-    critical_J2_grain_history,
-    dtype=np.int32
-)
-
-
-
-
-
-
-
-
 # ================================================================
 # 23. SAVE RESULTS
 # ================================================================
 
 np.savez_compressed(
 
-    # "316L_FE_CPFEM_optimized_results_v03_local_fields.npz",
-    "316L_FE_CPFEM_cyclic_3cycles_stepwise_local_history_v04.npz",
+    "316L_FE_CPFEM_optimized_results_v03_local_fields.npz",
 
 
-# ============================================================
-    # FATIGUE INDICATORS
-    # ============================================================
-
-    fip_cycle_numbers=
-        np.arange(
-            1,
-            len(fip_CPS_history) + 1,
-            dtype=np.int32
-        ),
-
-    fip_CPS_history=
-        fip_CPS_history,
-
-    fip_plastic_dissipation_history=
-        fip_PD_history,
-
-    fip_Fatemi_Socie_history=
-        fip_FS_history,
-
-    fip_Fatemi_Socie_shear_history=
-        fip_FS_shear_history,
-
-    fip_Fatemi_Socie_normal_factor_history=
-        fip_FS_normal_history,
-
-    fip_Brown_Miller_history=
-        fip_BM_history,
-
-    fip_Brown_Miller_shear_history=
-        fip_BM_shear_history,
-
-    fip_Brown_Miller_normal_history=
-        fip_BM_normal_history,
-
-    fip_SWT_history=
-        fip_SWT_history,
-
-    fip_J2_plastic_strain_range_history=
-        fip_J2_history,
-
-    # ------------------------------------------------------------
-    # FIP critical locations
-    # ------------------------------------------------------------
-
-    critical_CPS_element_history=
-        critical_CPS_element_history,
-
-    critical_CPS_grain_history=
-        critical_CPS_grain_history,
-
-    critical_CPS_slip_system_history=
-        critical_CPS_slip_system_history,
-
-    critical_PD_element_history=
-        critical_PD_element_history,
-
-    critical_PD_grain_history=
-        critical_PD_grain_history,
-
-    critical_FS_element_history=
-        critical_FS_element_history,
-
-    critical_FS_grain_history=
-        critical_FS_grain_history,
-
-    critical_FS_slip_system_history=
-        critical_FS_slip_system_history,
-
-    critical_BM_element_history=
-        critical_BM_element_history,
-
-    critical_BM_grain_history=
-        critical_BM_grain_history,
-
-    critical_BM_slip_system_history=
-        critical_BM_slip_system_history,
-
-    critical_SWT_element_history=
-        critical_SWT_element_history,
-
-    critical_SWT_grain_history=
-        critical_SWT_grain_history,
-
-    critical_SWT_slip_system_history=
-        critical_SWT_slip_system_history,
-
-    critical_J2_element_history=
-        critical_J2_element_history,
-
-    critical_J2_grain_history=
-        critical_J2_grain_history,
-
-    # ------------------------------------------------------------
-    # Crystallographic normal stress / strain
-    # ------------------------------------------------------------
-
-    local_normal_stress_history=
-        normal_stress_history,
-
-    local_normal_strain_history=
-        normal_strain_history,
-
-    local_signed_slip_history=
-        signed_slip_history,
-
-    fip_FS_k=
-        np.float64(FS_K),
-
-    fip_FS_sigma_ref=
-        np.float64(FS_SIGMA_REF),
-
-    fip_BM_C=
-        np.float64(BM_C),
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
     # ------------------------------------------------------------
     # GLOBAL RESPONSE
     # ------------------------------------------------------------
@@ -12842,6 +10945,11 @@ np.savez_compressed(
     element_centers=
         element_centers.copy(),
 
+
+
+    element_surface_distance=
+        element_surface_distance.copy(),
+
     nodes=
         nodes_um.copy(),
 
@@ -12906,6 +11014,24 @@ np.savez_compressed(
         np.int32(
             critical_rss_slip_system
         ),
+
+
+
+    critical_plastic_surface_distance=
+        np.float64(
+            critical_plastic_surface_distance
+        ),
+    
+    critical_von_mises_surface_distance=
+        np.float64(
+            critical_von_mises_surface_distance
+        ),
+    
+    critical_rss_surface_distance=
+        np.float64(
+            critical_rss_surface_distance
+        ),
+        
 
 
     # ------------------------------------------------------------
@@ -13040,8 +11166,7 @@ print(
 )
 
 print(
-    # "316L_FE_CPFEM_optimized_results_v03_local_fields.npz"
-    "316L_FE_CPFEM_cyclic_3cycles_stepwise_local_history_v04.npz"
+    "316L_FE_CPFEM_optimized_results_v03_local_fields.npz"
 )
 
 
@@ -13320,23 +11445,23 @@ element_accumulated_slip = (
 
 sigma = element_stress
 
-sigma_dev = (
-    sigma
-    - np.trace(
-        sigma,
-        axis1=1,
-        axis2=2
-    )[:, None, None] / 3.0
-)
+# sigma_dev = (
+#     sigma
+#     - np.trace(
+#         sigma,
+#         axis1=1,
+#         axis2=2
+#     )[:, None, None] / 3.0
+# )
 
-element_von_mises = np.sqrt(
-    1.5 *
-    np.einsum(
-        "eij,eij->e",
-        sigma_dev,
-        sigma_dev
-    )
-)
+# element_von_mises = np.sqrt(
+#     1.5 *
+#     np.einsum(
+#         "eij,eij->e",
+#         sigma_dev,
+#         sigma_dev
+#     )
+# )
 
 
 
@@ -13510,183 +11635,12 @@ print(
 
 
 
-# # ------------------------------------------------
-# # Global local-field statistics
-# # ------------------------------------------------
-
-# final_mean_j2_plastic_strain = float(
-#     np.mean(element_equivalent_plastic_strain)
-# )
-
-# final_max_j2_plastic_strain = float(
-#     np.max(element_equivalent_plastic_strain)
-# )
-
-# final_mean_von_mises = float(
-#     np.mean(element_von_mises)
-# )
-
-# final_max_von_mises = float(
-#     np.max(element_von_mises)
-# )
-
-# final_max_rss = float(
-#     np.max(np.abs(element_rss))
-# )
-
-# final_mean_accumulated_slip = float(
-#     np.mean(accumulated_slip_committed)
-# )
-
-# print(
-#     f"Mean J2 plastic strain      = "
-#     f"{final_mean_j2_plastic_strain:.8e}"
-# )
-
-# print(
-#     f"Maximum J2 plastic strain   = "
-#     f"{final_max_j2_plastic_strain:.8e}"
-# )
-
-# print(
-#     f"Mean von-Mises stress       = "
-#     f"{final_mean_von_mises:.6f} MPa"
-# )
-
-# print(
-#     f"Maximum von-Mises stress    = "
-#     f"{final_max_von_mises:.6f} MPa"
-# )
-
-# print(
-#     f"Maximum |RSS|               = "
-#     f"{final_max_rss:.6f} MPa"
-# )
-
-# print(
-#     f"Critical element            = "
-#     f"{critical_element_id}"
-# )
-
-# print(
-#     f"Critical grain              = "
-#     f"{critical_grain_id}"
-# )
-
-# print(
-#     f"Critical RSS element        = "
-#     f"{critical_rss_element_id}"
-# )
-
-# print(
-#     f"Critical RSS grain          = "
-#     f"{critical_rss_grain_id}"
-# )
-
-# print(
-#     f"Critical RSS slip system    = "
-#     f"{critical_rss_slip_system}"
-# )
 
 
 
 
 
 
-
-
-
-# # ================================================================
-# # 27. FINAL SUMMARY
-# # ================================================================
-
-# print()
-# print("=" * 70)
-# print("MODULE 5B-OPTIMIZED SUMMARY")
-# print("=" * 70)
-
-
-# print(
-#     f"Elements             = {n_elements}"
-# )
-
-
-# print(
-#     f"Nodes                = {n_nodes}"
-# )
-
-
-# print(
-#     f"DOFs                 = {NDOF}"
-# )
-
-
-# print(
-#     f"Grains               = {n_grains}"
-# )
-
-
-# print(
-#     f"Final strain         = "
-#     f"{global_strain_history[-1]:.8e}"
-# )
-
-
-# print(
-#     f"Final axial stress   = "
-#     f"{global_stress_history[-1]:.6f} MPa"
-# )
-
-
-# print(
-#     f"Total load steps     = "
-#     f"{len(global_strain_history)}"
-# )
-
-
-# print(
-#     f"Maximum local J2 plastic strain = "
-#     f"{np.max(final_equiv_plastic_strain):.8e}"
-# )
-
-
-# print(
-#     f"Maximum local von-Mises stress = "
-#     f"{np.max(final_equiv_stress):.6f} MPa"
-# )
-
-
-# print(
-#     f"Critical grain      = "
-#     f"{critical_grain_id}"
-# )
-
-
-# print(
-#     f"Critical element    = "
-#     f"{critical_element_id}"
-# )
-
-
-# print(
-#     f"Critical RSS grain  = "
-#     f"{critical_rss_grain_id}"
-# )
-
-
-# print(
-#     f"Critical slip system = "
-#     f"{critical_rss_slip_system}"
-# )
-
-
-# print(
-#     f"Total runtime        = "
-#     f"{total_time:.3f} s"
-# )
-
-
-# print("=" * 70)
 
 
 
@@ -13758,6 +11712,8 @@ critical_rss_slip_system = int(
         np.abs(element_rss[critical_rss_element_id])
     )
 )
+
+
 
 
 # ------------------------------------------------
